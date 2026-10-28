@@ -1,0 +1,44 @@
+[project]
+name = "radio247"
+version = "0.1.0"
+description = "Continuous NAS music playout with progressive preparation and RTMPS recovery"
+requires-python = ">=3.12"
+dependencies = [
+    "av>=16,<17",
+    "numpy>=2,<3",
+    "pillow>=12,<13",
+    "fastapi>=0.121,<1",
+    "uvicorn>=0.38,<1",
+    "httpx>=0.28,<1",
+    "python-multipart>=0.0.20,<1",
+    "argon2-cffi>=25,<26",
+    "itsdangerous>=2.2,<3",
+    "psutil>=7,<8",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.14,<1", "mypy>=1.18,<2"]
+ui = [
+    "playwright>=1.56,<2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/radio247"]

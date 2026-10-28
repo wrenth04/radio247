@@ -1,0 +1,50 @@
+name: radio247
+
+services:
+  radio247:
+    image: radio247:local
+    build:
+      context: .
+      target: runtime
+      args:
+        RADIO247_UID: ${RADIO247_UID:-1000}
+        RADIO247_GID: ${RADIO247_GID:-1000}
+    command: [python, -m, radio247, serve]
+    user: "${RADIO247_UID:-1000}:${RADIO247_GID:-1000}"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: ${RADIO247_STOP_GRACE_PERIOD:-30s}
+    cpus: ${RADIO247_CPUS:-2.0}
+    mem_limit: ${RADIO247_MEMORY_LIMIT:-1g}
+    pids_limit: ${RADIO247_PIDS_LIMIT:-128}
+    read_only: true
+    tmpfs:
+      - /tmp:size=${RADIO247_TMP_SIZE:-256m},mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "${RADIO247_HOST_BIND:-0.0.0.0}:${RADIO247_HOST_PORT:-8000}:${RADIO247_WEB_PORT:-8000}"
+    env_file:
+      - .env
+    volumes:
+      - ./media:/media
+      - ./images:/images
+      - ./cache:/cache
+      - ./data:/data
+      - ./output:/output
+      - ./runtime:/run/radio247
+    healthcheck:
+      test: [CMD, python, -m, radio247, health]
+      interval: ${RADIO247_HEALTH_INTERVAL:-10s}
+      timeout: ${RADIO247_HEALTH_TIMEOUT:-10s}
+      retries: ${RADIO247_HEALTH_RETRIES:-3}
+      start_period: ${RADIO247_HEALTH_START_PERIOD:-30s}
+    logging:
+      driver: json-file
+      options:
+        max-size: ${RADIO247_LOG_MAX_SIZE:-10m}
+        max-file: "${RADIO247_LOG_MAX_FILES:-3}"
+
+networks:
+  default:
+    driver: bridge
