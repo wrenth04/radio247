@@ -119,6 +119,7 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
 .count{background:#2a302c;color:var(--muted);border-radius:6px;font-size:12px;padding:2px 8px;font-variant-numeric:tabular-nums}
 .library-description{font-size:12px;color:var(--muted);margin-top:4px}
 .library-toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:0 24px 18px;flex-wrap:wrap}
+.image-form{display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:0 24px 20px}.image-form label{display:grid;gap:4px;font-size:13px}.image-form p{flex-basis:100%;margin:0}
 .filters{display:flex;gap:5px;flex-wrap:wrap}
 .filter{padding:7px 12px;border-radius:7px;color:var(--muted);background:transparent;font-size:12px;min-height:44px}
 .filter[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
@@ -129,8 +130,9 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
 .search input{width:100%;min-width:0;border:0;background:transparent;color:var(--ink);font-size:12px;outline:none}
 .search:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .track-list{padding:0 12px}
-.track-row{display:grid;grid-template-columns:36px 60px minmax(0,1fr) auto 42px;gap:14px;align-items:center;
+.track-row{display:grid;grid-template-columns:36px 60px minmax(0,1fr) auto 42px 38px;gap:14px;align-items:center;
   padding:12px;border-top:1px solid var(--line);min-height:85px;border-radius:9px}
+.track-delete{width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer}.track-delete:hover:not(:disabled){color:#ff8a80;background:#3a2a2a}
 .track-row.playing{background:#253526}
 .track-number{text-align:center;color:#899189;font:12px ui-monospace,monospace}
 .track-number .icon{color:var(--green);vertical-align:middle}
@@ -162,6 +164,7 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
 .toast.error{background:var(--red-soft);border-color:#694344}
 .toast p{overflow-wrap:anywhere;font-size:13px}
 .toast button{background:transparent;color:inherit;display:grid;place-items:center;padding:10px;min-width:44px;min-height:44px}
+@media(min-width:1000px){.track-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px}}
 @media(max-width:850px){
   main{padding:24px}.player-panel{gap:0 24px;padding:20px}
   .player-panel{grid-template-columns:minmax(0,1fr)}
@@ -180,10 +183,10 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
   .record{width:92px;margin-bottom:10px}.now-playing{gap:8px}
   .transport .button{padding:10px 16px;font-size:13px}.library-panel{margin-top:22px}
   .library-toolbar{padding:0 16px 16px;gap:12px}.search{width:100%;order:-1}.filters{gap:2px}.filter{padding:7px 10px}
-  .track-row{grid-template-columns:46px minmax(0,1fr) 44px;gap:10px;padding:12px 6px}.track-number{display:none}
+  .track-row{grid-template-columns:46px minmax(0,1fr) 44px 38px;gap:10px;padding:12px 6px}.track-number{display:none}
   .track-art{width:46px;height:46px;grid-column:1;grid-row:1/3}.track-copy{grid-column:2;grid-row:1}
   .track-row>.badge{grid-column:2;grid-row:2;justify-self:start;padding:2px 6px;font-size:10px}
-  .track-play{grid-column:3;grid-row:1/3}.track-row{row-gap:4px}
+  .track-play{grid-column:3;grid-row:1/3}.track-delete{grid-column:4;grid-row:1/3}.track-row{row-gap:4px}
   .library-footer{padding:12px 18px;flex-wrap:wrap}.diagnostics>summary span{display:none}
   .page-footer{flex-wrap:wrap;gap:4px}.toast{bottom:16px}.elapsed{font-size:12px}
   .upload-panel>summary span{display:block;margin:4px 0 0}
@@ -204,6 +207,7 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
   <symbol id="i-next" viewBox="0 0 24 24"><path d="m5 5 10 7-10 7ZM19 5v14"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 2M5 16a8 8 0 0 0 13 2"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
 </defs>
 </svg>
@@ -237,6 +241,27 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
       <p id="output-summary" class="output-summary">正在確認播送狀態</p>
     </article>
   </section>
+  <details id="image-panel" class="panel upload-panel">
+    <summary class="panel-heading"><h2>預設圖顯示</h2><span id="image-summary" class="badge">—</span></summary>
+    <form id="image-form" class="image-form">
+      <label>模式
+        <select id="image-position">
+          <option value="start">開頭</option>
+          <option value="end">結尾</option>
+          <option value="both">頭尾</option>
+          <option value="middle">中段</option>
+          <option value="interval">週期</option>
+          <option value="always">全程</option>
+          <option value="random">隨機</option>
+          <option value="none">不顯示</option>
+        </select>
+      </label>
+      <label>顯示秒數 <input id="image-seconds" type="number" min="0" step="any" required></label>
+      <label id="image-interval-label">週期（秒）<input id="image-interval" type="number" min="0" step="any"></label>
+      <button class="button primary small" type="submit">套用</button>
+      <p id="image-note" class="output-summary"></p>
+    </form>
+  </details>
   <section id="library" class="panel library-panel" aria-labelledby="library-heading">
     <div class="panel-heading">
       <div><div class="library-title"><h2 id="library-heading">你的音樂</h2><span id="track-count" class="count">—</span></div></div>
@@ -303,7 +328,7 @@ let state=null,online=false,controlBusy=false,uploadBusy=false,selectedFile=null
 let activeFilter="all",renderKey="",pollTimer,refreshPromise,toastTimer;
 const trackStates={ready:"可播放",preparing:"準備中",uploaded:"等待準備",failed:"需處理"};
 const icons={
-  play:"i-play",music:"i-music",radio:"i-radio"
+  play:"i-play",music:"i-music",radio:"i-radio",trash:"i-trash"
 };
 function icon(name){
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
@@ -377,6 +402,7 @@ function updateButtons(){
       (action==="skip"&&(!isPlaying()||!state.ready))||
       (action==="retry"&&!state.tracks.some(track=>track.state==="failed"));
   });
+  document.querySelectorAll("button[data-delete-id]").forEach(button=>{button.disabled=!online||controlBusy;});
   document.querySelectorAll("button[data-track-id]").forEach(button=>{
     button.disabled=!online||controlBusy||button.dataset.ready!=="true";
   });
@@ -492,7 +518,10 @@ function renderTracks(){
       target.title=track.state==="ready"?(playing?"重新播放":"立即播放"):"曲目尚未就緒";
     }
     if(playing)button.setAttribute("aria-current","true");
-    button.append(icon("play"));row.append(number,art,copy,status,button);fragment.append(row);
+    const remove=document.createElement("button");remove.type="button";remove.className="track-delete";
+    remove.dataset.deleteId=track.id;remove.dataset.title=track.title;remove.dataset.focusKey=`${track.id}:delete`;
+    remove.setAttribute("aria-label",`刪除：${track.title}`);remove.title="刪除曲目";remove.append(icon("trash"));
+    button.append(icon("play"));row.append(number,art,copy,status,button,remove);fragment.append(row);
   }
   body.replaceChildren(fragment);updateButtons();
   if(focused){
@@ -500,6 +529,27 @@ function renderTracks(){
     if(target&&!target.disabled)target.focus({preventScroll:true});
   }
 }
+const imageForm=$("#image-form");
+function syncImageForm(){
+  const image=state?.image;if(!image)return;
+  const names={start:"開頭",end:"結尾",both:"頭尾",middle:"中段",interval:"週期",always:"全程",random:"隨機",none:"不顯示"};
+  setText($("#image-summary"),image.available?names[image.position]:"未設定預設圖");
+  if(!imageForm.contains(document.activeElement)&&!imageForm.dataset.dirty){
+    $("#image-position").value=image.position;$("#image-seconds").value=image.seconds;$("#image-interval").value=image.interval;
+  }
+  const mode=$("#image-position").value;
+  $("#image-interval-label").hidden=mode!=="interval";
+  $("#image-seconds").disabled=mode==="always"||mode==="none";
+  setText($("#image-note"),image.available?"":"尚未設定 RADIO247_DEFAULT_IMAGE，此設定不會生效。");
+}
+imageForm.oninput=()=>{imageForm.dataset.dirty="1";syncImageForm();};
+imageForm.onsubmit=async event=>{
+  event.preventDefault();
+  try{
+    await call("/api/image",{method:"POST",headers:{"Content-Type":"application/json","X-Radio247-Action":"1"},body:JSON.stringify({position:$("#image-position").value,seconds:Number($("#image-seconds").value||0),interval:Number($("#image-interval").value||0)})});
+    delete imageForm.dataset.dirty;notify("已更新預設圖顯示模式。");await refresh();
+  }catch(error){notify(errorText(error),true);}
+};
 async function control(action,trackId,title){
   if(controlBusy||!online)return;
   const focused=document.activeElement,focusKey=focused?.dataset.focusKey;
@@ -523,7 +573,18 @@ async function control(action,trackId,title){
 document.querySelectorAll("[data-action]").forEach(button=>{
   button.onclick=()=>control(button.dataset.action);
 });
-$("#tracks").onclick=event=>{
+$("#tracks").onclick=async event=>{
+  const remove=event.target.closest("button[data-delete-id]");
+  if(remove){
+    if(remove.disabled||!confirm(`確定刪除「${remove.dataset.title}」？將一併刪除原始音檔與同名 PNG，無法復原。`))return;
+    controlBusy=true;updateButtons();
+    try{
+      await call(`/api/tracks/${remove.dataset.deleteId}`,{method:"DELETE",headers:{"X-Radio247-Action":"1"}});
+      notify(`已刪除「${remove.dataset.title}」。`);await refresh();
+    }catch(error){notify(errorText(error),true);}
+    finally{controlBusy=false;updateButtons();}
+    return;
+  }
   const button=event.target.closest("button[data-track-id]");
   if(button&&!button.disabled)control("play",button.dataset.trackId,button.dataset.title);
 };
@@ -597,7 +658,7 @@ function refresh(){
   refreshPromise=(async()=>{
     try{
       state=await call("/api/status");online=true;$("#connection-alert").hidden=true;
-      renderStatus();
+      renderStatus();syncImageForm();
     }catch(error){
       online=false;
       setText($("#connection-alert"),`狀態無法更新：${errorText(error)} 系統會自動重試；暫停播放操作以避免誤判。`);

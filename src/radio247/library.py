@@ -25,7 +25,7 @@ from radio247.media import (
     prepare_video,
     probe,
 )
-from radio247.settings import Settings
+from radio247.settings import ImagePosition, Settings
 
 LOG = logging.getLogger(__name__)
 AUDIO_SUFFIXES = {".mp3", ".mpa", ".m4a", ".wav"}
@@ -46,6 +46,9 @@ class Snapshot(BaseModel):
     track_id: str | None = None
     default_video: str | None
     tracks: list[Track]
+    image_position: ImagePosition | None = None
+    image_seconds: float | None = None
+    image_interval: float | None = None
 
 
 class Store:
@@ -133,7 +136,35 @@ class Store:
                 )
             ]
 
+    def image(self) -> dict:
+        with self.connect() as db:
+            saved = {
+                row["key"]: row["value"]
+                for row in db.execute("SELECT key,value FROM metadata WHERE key LIKE 'image_%'")
+            }
+        return {
+            "position": saved.get("image_position", self.settings.default_image_position),
+            "seconds": float(saved.get("image_seconds", self.settings.default_image_seconds)),
+            "interval": float(saved.get("image_interval", self.settings.default_image_interval)),
+        }
+
+    def set_image(self, position: str, seconds: float, interval: float) -> None:
+        if position == "interval" and interval <= seconds:
+            raise ValueError("Interval must exceed the display seconds")
+        with self.connect() as db:
+            for key, value in (
+                ("image_position", position),
+                ("image_seconds", repr(seconds)),
+                ("image_interval", repr(interval)),
+            ):
+                db.execute(
+                    "INSERT INTO metadata(key,value) VALUES(?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (key, value),
+                )
+
     def snapshot(self, default_video: Path | None) -> Snapshot:
+        image = self.image()
         with self.connect() as db:
             control = db.execute("SELECT enabled,skip,track_id FROM control WHERE id=1").fetchone()
             rows = db.execute(
@@ -146,6 +177,9 @@ class Store:
             track_id=control["track_id"],
             default_video=str(default_video) if default_video else None,
             tracks=[Track.model_validate(dict(row)) for row in rows],
+            image_position=image["position"],
+            image_seconds=image["seconds"],
+            image_interval=image["interval"],
         )
 
 
@@ -296,6 +330,27 @@ class Library:
                     )
         finally:
             self.scanning = False
+
+    def delete(self, track_id: str) -> bool:
+        """Remove a track's source audio and paired PNG; cached derivatives stay for reuse."""
+        for source in self.settings.media_dir.iterdir():
+            if (
+                source.is_symlink()
+                or not source.is_file()
+                or source.suffix.lower() not in AUDIO_SUFFIXES
+                or hashlib.sha256(source.name.encode()).hexdigest()[:24] != track_id
+            ):
+                continue
+            image = self.settings.images_dir / f"{source.stem}.png"
+            source.unlink()
+            if image.is_file() and not image.is_symlink():
+                image.unlink()
+            self.observed.pop(source, None)
+            self.digests.pop(source, None)
+            with self.store.connect() as db:
+                db.execute("UPDATE tracks SET active=0 WHERE id=?", (track_id,))
+            return True
+        return False
 
     def prepare(self, track_id: str, source: Path, image: Path | None) -> None:
         fingerprint = ""

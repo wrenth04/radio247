@@ -1,3 +1,4 @@
+import hashlib
 import io
 import stat
 import time
@@ -296,3 +297,34 @@ def test_track_thumbnails_and_specific_play_commands(web_client, settings):
         ).raise_for_status()
         client.post("/api/control", json={"action": "skip"}).raise_for_status()
         assert store.snapshot(None).track_id is None
+
+
+def test_image_mode_is_adjustable(settings):
+    with TestClient(create_app(settings)) as client:
+        client.auth = ("admin", settings.admin_password_file.read_text().strip())
+        headers = {"X-Radio247-Action": "1"}
+        body = {"position": "interval", "seconds": 10, "interval": 60}
+        assert client.post("/api/image", json=body).status_code == 403
+        assert client.post("/api/image", json=body, headers=headers).status_code == 200
+        image = client.get("/api/status").json()["image"]
+        assert (image["position"], image["seconds"], image["interval"]) == ("interval", 10, 60)
+        bad = body | {"interval": 5}
+        assert client.post("/api/image", json=bad, headers=headers).status_code == 422
+        bad = body | {"position": "sideways"}
+        assert client.post("/api/image", json=bad, headers=headers).status_code == 422
+
+
+def test_delete_track_removes_source_and_image(settings):
+    song = settings.media_dir / "gone.wav"
+    make_song(song)
+    image = settings.images_dir / "gone.png"
+    Image.new("RGB", (64, 64)).save(image)
+    with TestClient(create_app(settings)) as client:
+        client.auth = ("admin", settings.admin_password_file.read_text().strip())
+        headers = {"X-Radio247-Action": "1"}
+        track_id = hashlib.sha256(b"gone.wav").hexdigest()[:24]
+        assert client.delete(f"/api/tracks/{track_id}").status_code == 403
+        assert client.delete("/api/tracks/not-an-id", headers=headers).status_code == 404
+        assert client.delete(f"/api/tracks/{track_id}", headers=headers).status_code == 200
+        assert not song.exists() and not image.exists()
+        assert client.delete(f"/api/tracks/{track_id}", headers=headers).status_code == 404

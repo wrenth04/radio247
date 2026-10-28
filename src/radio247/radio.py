@@ -128,7 +128,12 @@ def run(settings: Settings) -> None:
                         break
                 count = audio.codec.frame_size
                 samples = player.read(count, snapshot.tracks)
-                picture = player.picture(snapshot.default_video)
+                picture = player.picture(
+                    snapshot.default_video,
+                    snapshot.image_position,
+                    snapshot.image_seconds,
+                    snapshot.image_interval,
+                )
                 publisher.tick(video.path, audio.extra)
                 for packet in audio.encode(samples, pts):
                     while Fraction(video_frame, settings.fps) <= packet.timestamp:

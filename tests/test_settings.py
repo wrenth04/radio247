@@ -52,7 +52,12 @@ def test_env_overrides_and_validation(monkeypatch):
         {"default_image_seconds": -1},
         {"default_image_seconds": float("nan")},
         {"default_image_seconds": float("inf")},
-        {"default_image_position": "middle"},
+        {"default_image_position": "sideways"},
+        {
+            "default_image_position": "interval",
+            "default_image_seconds": 30,
+            "default_image_interval": 30,
+        },
     ],
 )
 def test_reject_invalid_settings(values):

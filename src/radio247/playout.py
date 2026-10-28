@@ -17,6 +17,21 @@ from radio247.settings import Settings
 LOG = logging.getLogger(__name__)
 
 
+RANDOM_MODES = ("start", "end", "both", "middle")
+
+
+def show_default(mode: str, now: float, total: float, window: float, period: float) -> bool:
+    start = now < window
+    end = total - now <= window
+    return {
+        "start": start,
+        "end": end,
+        "both": start or end,
+        "middle": abs(now - total / 2) <= window / 2,
+        "interval": period > 0 and now % period < window,
+    }.get(mode, False)
+
+
 @dataclass
 class AudioBlock:
     generation: int
@@ -47,6 +62,8 @@ class Playout:
             maxsize=max(1, math.ceil(settings.decode_buffer_seconds * settings.sample_rate / 1024))
         )
         self.pending: AudioBlock | None = None
+        self.drawn: tuple[str, str] | None = None
+        self.last_position = 0
         self.offset = 0
         self.discard = 0
         self.skip_remaining = 0
@@ -62,16 +79,30 @@ class Playout:
         if self.thread.is_alive():
             raise RuntimeError("Audio decoder worker did not stop")
 
-    def picture(self, default_video: str) -> Path:
+    def picture(
+        self,
+        default_video: str,
+        position: str | None = None,
+        seconds: float | None = None,
+        interval: float | None = None,
+    ) -> Path:
         if self.current is None:
             return Path(default_video)
-        window = self.settings.default_image_seconds * self.settings.sample_rate
-        in_window = (
-            self.position < window
-            if self.settings.default_image_position == "start"
-            else self.current.samples - self.position <= window
-        )
-        if self.settings.default_image is not None and window > 0 and in_window:
+        position = position or self.settings.default_image_position
+        seconds = self.settings.default_image_seconds if seconds is None else seconds
+        interval = self.settings.default_image_interval if interval is None else interval
+        if position == "random":
+            restarted = self.position < self.last_position
+            if self.drawn is None or self.drawn[0] != self.current.id or restarted:
+                self.drawn = (self.current.id, random.choice(RANDOM_MODES))
+            position = self.drawn[1]
+        self.last_position = self.position
+        rate = self.settings.sample_rate
+        total, now, window = self.current.samples, self.position, seconds * rate
+        if self.settings.default_image is not None and (
+            position == "always"
+            or (window > 0 and show_default(position, now, total, window, interval * rate))
+        ):
             return Path(default_video)
         return Path(self.current.video)
 

@@ -6,6 +6,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
+ImagePosition = Literal["start", "end", "both", "middle", "interval", "always", "random", "none"]
+
 
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True, hide_input_in_errors=True)
@@ -17,8 +19,9 @@ class Settings(BaseModel):
     output_dir: Path = Path("/output")
     runtime_dir: Path = Path("/run/radio247")
     default_image: Path | None = None
-    default_image_position: Literal["start", "end"] = "end"
+    default_image_position: ImagePosition = "end"
     default_image_seconds: float = Field(default=30, ge=0, allow_inf_nan=False)
+    default_image_interval: float = Field(default=120, ge=0, allow_inf_nan=False)
     admin_password_file: Path = Path("/data/secrets/admin-password")
     internal_token_file: Path = Path("/data/secrets/internal-token")
     stream_key: SecretStr = SecretStr("")
@@ -84,6 +87,11 @@ class Settings(BaseModel):
     def validate_combination(self) -> Self:
         if self.width % 2 or self.height % 2:
             raise ValueError("Video dimensions must be even for yuv420p")
+        if (
+            self.default_image_position == "interval"
+            and self.default_image_interval <= self.default_image_seconds
+        ):
+            raise ValueError("DEFAULT_IMAGE_INTERVAL must exceed DEFAULT_IMAGE_SECONDS")
         if self.retry_initial > self.retry_max:
             raise ValueError("RETRY_INITIAL must not exceed RETRY_MAX")
         if self.ingest_url and not self.ingest_url.startswith(("rtmp://", "rtmps://")):
@@ -110,7 +118,7 @@ class Settings(BaseModel):
             if name in os.environ:
                 raise ValueError(
                     f"{name} is no longer supported; use RADIO247_DEFAULT_IMAGE_SECONDS "
-                    "and RADIO247_DEFAULT_IMAGE_POSITION (start or end)"
+                    "and RADIO247_DEFAULT_IMAGE_POSITION"
                 )
         values = {}
         for field in cls.model_fields:

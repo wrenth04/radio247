@@ -19,7 +19,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, model_validator
 
 from radio247.library import AUDIO_SUFFIXES, Library, Store, secret
-from radio247.settings import Settings
+from radio247.settings import ImagePosition, Settings
 from radio247.uploads import import_zip
 
 COVER_NAME = re.compile(r"[0-9a-f]{64}\.mp4")
@@ -34,6 +34,12 @@ class Action(BaseModel):
         if (self.action == "play") != (self.track_id is not None):
             raise ValueError("track_id is required only for the play action")
         return self
+
+
+class ImageMode(BaseModel):
+    position: ImagePosition
+    seconds: float = Field(ge=0, le=86400, allow_inf_nan=False)
+    interval: float = Field(ge=0, le=86400, allow_inf_nan=False)
 
 
 def image_url(video: str | None) -> str | None:
@@ -181,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "preparing": library.current,
             "scanning": library.scanning,
             "error": library.error,
+            "image": store.image() | {"available": settings.default_image is not None},
             "radio": radio,
             "radio_stale": stale,
             "cover_url": cover_url,
@@ -221,6 +228,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
         return {"status": "requested"}
+
+    @app.post("/api/image", dependencies=[Depends(mutation)])
+    def image(mode: ImageMode):
+        try:
+            store.set_image(mode.position, mode.seconds, mode.interval)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        return store.image()
+
+    @app.delete("/api/tracks/{track_id}", dependencies=[Depends(mutation)])
+    def delete_track(track_id: str):
+        if not re.fullmatch(r"[0-9a-f]{24}", track_id):
+            raise HTTPException(404, "Track not found")
+        if not library.delete(track_id):
+            raise HTTPException(404, "Track not found")
+        if radio.get("track_id") == track_id and radio.get("playing"):
+            store.control("skip")
+        return {"status": "deleted"}
 
     @app.get("/internal/snapshot", dependencies=[Depends(internal)])
     def snapshot():
