@@ -9,11 +9,13 @@ import threading
 import time
 
 import httpx
-import uvicorn
 
 from radio247.settings import Settings
 
 LOG = logging.getLogger(__name__)
+
+# Child exit is polled every second; the heavier HTTP/heartbeat probe runs less often.
+PROBE_EVERY = 5
 
 
 def check_web(settings: Settings) -> None:
@@ -39,12 +41,16 @@ def serve(settings: Settings) -> None:
     last_healthy = time.monotonic()
     started = last_healthy
     became_healthy = False
+    tick = 0
     try:
         for role in ("web", "radio"):
             children.append(subprocess.Popen([sys.executable, "-m", "radio247", role]))
         while not stopping.wait(1):
             if any(child.poll() is not None for child in children):
                 raise RuntimeError("A managed service exited; restarting the container is required")
+            tick += 1
+            if tick % PROBE_EVERY:
+                continue
             try:
                 check_web(settings)
                 check_radio(settings)
@@ -83,6 +89,8 @@ def main() -> None:
     if role == "serve":
         serve(settings)
     elif role == "web":
+        import uvicorn
+
         from radio247.web import create_app
 
         uvicorn.run(

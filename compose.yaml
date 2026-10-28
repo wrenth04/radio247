@@ -34,8 +34,8 @@ services:
       - ./output:/output
       - ./runtime:/run/radio247
     healthcheck:
-      test: [CMD, python, -m, radio247, health]
-      interval: ${RADIO247_HEALTH_INTERVAL:-10s}
+      test: [CMD, curl, -fsS, --max-time, "5", "http://127.0.0.1:${RADIO247_WEB_PORT:-8000}/healthz"]
+      interval: ${RADIO247_HEALTH_INTERVAL:-30s}
       timeout: ${RADIO247_HEALTH_TIMEOUT:-10s}
       retries: ${RADIO247_HEALTH_RETRIES:-3}
       start_period: ${RADIO247_HEALTH_START_PERIOD:-30s}

@@ -226,7 +226,7 @@ docker compose stop
 
 本機 FLV 預設每 300 秒換檔、最多保留 3 段，只清理 output 目錄中符合 `radio-*.flv` 的舊檔，請勿用此前綴存放其他資料；換檔會重建本機 publisher，不保證檔間無縫。YouTube 模式不做定時換檔。
 
-`restart: unless-stopped` 處理容器程序退出；Docker healthcheck 本身不會重啟 unhealthy 容器。容器內 supervisor 會監看子程序及後台／播放心跳，逾時便回收子程序並退出，交由 Docker 重啟。控制 API 短暫失聯時，radio 保留最近的播放快照。
+`restart: unless-stopped` 處理容器程序退出；Docker healthcheck 以 curl 每 30 秒只檢查 web `/healthz`，且本身不會重啟 unhealthy 容器。容器內 supervisor 每 5 秒檢查 web 與 radio 心跳， 會監看子程序及後台／播放心跳，逾時便回收子程序並退出，交由 Docker 重啟。控制 API 短暫失聯時，radio 保留最近的播放快照。
 
 ## 開發與測試
 

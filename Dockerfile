@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y ffmpeg ca-certificates \
+    && apt-get install --no-install-recommends -y ffmpeg ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 ARG RADIO247_UID=1000
