@@ -130,9 +130,9 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
 .search input{width:100%;min-width:0;border:0;background:transparent;color:var(--ink);font-size:12px;outline:none}
 .search:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .track-list{padding:0 12px}
-.track-row{display:grid;grid-template-columns:36px 60px minmax(0,1fr) auto 42px 38px;gap:14px;align-items:center;
+.track-row{display:grid;grid-template-columns:36px 60px minmax(0,1fr) auto 42px 38px 38px;gap:14px;align-items:center;
   padding:12px;border-top:1px solid var(--line);min-height:85px;border-radius:9px}
-.track-delete{width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer}.track-delete:hover:not(:disabled){color:#ff8a80;background:#3a2a2a}
+.track-hide,.track-delete{width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer}.track-hide:hover:not(:disabled){color:var(--ink);background:#303931}.track-row.hidden-track .track-art,.track-row.hidden-track .track-copy{opacity:.45}.track-delete:hover:not(:disabled){color:#ff8a80;background:#3a2a2a}
 .track-row.playing{background:#253526}
 .track-number{text-align:center;color:#899189;font:12px ui-monospace,monospace}
 .track-number .icon{color:var(--green);vertical-align:middle}
@@ -183,10 +183,10 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
   .record{width:92px;margin-bottom:10px}.now-playing{gap:8px}
   .transport .button{padding:10px 16px;font-size:13px}.library-panel{margin-top:22px}
   .library-toolbar{padding:0 16px 16px;gap:12px}.search{width:100%;order:-1}.filters{gap:2px}.filter{padding:7px 10px}
-  .track-row{grid-template-columns:46px minmax(0,1fr) 44px 38px;gap:10px;padding:12px 6px}.track-number{display:none}
+  .track-row{grid-template-columns:46px minmax(0,1fr) 44px 38px 38px;gap:10px;padding:12px 6px}.track-number{display:none}
   .track-art{width:46px;height:46px;grid-column:1;grid-row:1/3}.track-copy{grid-column:2;grid-row:1}
   .track-row>.badge{grid-column:2;grid-row:2;justify-self:start;padding:2px 6px;font-size:10px}
-  .track-play{grid-column:3;grid-row:1/3}.track-delete{grid-column:4;grid-row:1/3}.track-row{row-gap:4px}
+  .track-play{grid-column:3;grid-row:1/3}.track-hide{grid-column:4;grid-row:1/3}.track-delete{grid-column:5;grid-row:1/3}.track-row{row-gap:4px}
   .library-footer{padding:12px 18px;flex-wrap:wrap}.diagnostics>summary span{display:none}
   .page-footer{flex-wrap:wrap;gap:4px}.toast{bottom:16px}.elapsed{font-size:12px}
   .upload-panel>summary span{display:block;margin:4px 0 0}
@@ -207,6 +207,8 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
   <symbol id="i-next" viewBox="0 0 24 24"><path d="m5 5 10 7-10 7ZM19 5v14"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 2M5 16a8 8 0 0 0 13 2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s4 7 10 7a9.6 9.6 0 0 0 4.4-1.1"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
 </defs>
@@ -273,6 +275,7 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
         <button class="filter" data-filter="ready" aria-pressed="false">可播放 <span id="filter-ready">0</span></button>
         <button class="filter" data-filter="preparing" aria-pressed="false">準備中 <span id="filter-preparing">0</span></button>
         <button class="filter" data-filter="failed" aria-pressed="false">需處理 <span id="filter-failed">0</span></button>
+        <button class="filter" data-filter="hidden" aria-pressed="false">隱藏 <span id="filter-hidden">0</span></button>
       </div>
       <label class="search"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="search" type="search" placeholder="搜尋曲目名稱…" aria-label="搜尋曲目名稱"></label>
     </div>
@@ -292,15 +295,15 @@ main{max-width:1280px;margin:0 auto;padding:32px 40px}
         <label id="dropzone" class="dropzone">
           <span class="upload-icon"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span>
           <strong>拖曳檔案到這裡，或點選瀏覽</strong>
-          <span>MP3 · MPA · M4A · WAV · PNG · ZIP</span>
-          <input id="file" class="file-input" type="file" accept=".mp3,.mpa,.m4a,.wav,.png,.zip" aria-label="選擇音訊、PNG 或 ZIP 素材" aria-describedby="upload-help" required>
+          <span>MP3 · MPA · M4A · WAV · PNG · MP4 · ZIP</span>
+          <input id="file" class="file-input" type="file" accept=".mp3,.mpa,.m4a,.wav,.png,.mp4,.zip" aria-label="選擇音訊、PNG、MP4 或 ZIP 素材" aria-describedby="upload-help" required>
         </label>
         <div id="file-selection" class="file-selection" hidden><span id="file-name"></span><button id="upload-button" class="button primary small" type="submit">開始匯入</button></div>
         <progress id="upload-progress" class="upload-progress" aria-label="上傳與匯入進行中" hidden></progress>
         <p id="upload-status" role="status"></p>
       </form>
       <p class="upload-help">同名檔案將被取代。匯入完成後，音樂會在背景準備。</p>
-      <details class="upload-help"><summary>圖片配對與批次匯入說明</summary><p id="upload-help">音訊與 PNG 使用相同主檔名，例如 song.mp3 搭配 song.png；無配圖時使用預設圖片。多個檔案請打包為 ZIP，子資料夾會攤平、同主檔名自動配對。</p></details>
+      <details class="upload-help"><summary>圖片配對與批次匯入說明</summary><p id="upload-help">音訊與 PNG／MP4 使用相同主檔名，例如 song.mp3 搭配 song.png 或 song.mp4（MP4 無聲、依影片長度循環，最長 30 秒）；無配圖時使用預設圖片。多個檔案請打包為 ZIP，子資料夾會攤平、同主檔名自動配對。</p></details>
       <a id="upload-error-link" href="#diagnostics" data-diagnostics hidden>查看失敗詳情</a>
     </div>
   </details>
@@ -328,7 +331,7 @@ let state=null,online=false,controlBusy=false,uploadBusy=false,selectedFile=null
 let activeFilter="all",renderKey="",pollTimer,refreshPromise,toastTimer;
 const trackStates={ready:"可播放",preparing:"準備中",uploaded:"等待準備",failed:"需處理"};
 const icons={
-  play:"i-play",music:"i-music",radio:"i-radio",trash:"i-trash"
+  play:"i-play",music:"i-music",radio:"i-radio",trash:"i-trash",eye:"i-eye","eye-off":"i-eye-off"
 };
 function icon(name){
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
@@ -403,6 +406,7 @@ function updateButtons(){
       (action==="retry"&&!state.tracks.some(track=>track.state==="failed"));
   });
   document.querySelectorAll("button[data-delete-id]").forEach(button=>{button.disabled=!online||controlBusy;});
+  document.querySelectorAll("button[data-hide-id]").forEach(button=>{button.disabled=!online||controlBusy;});
   document.querySelectorAll("button[data-track-id]").forEach(button=>{
     button.disabled=!online||controlBusy||button.dataset.ready!=="true";
   });
@@ -465,11 +469,11 @@ function renderTracks(){
   const query=$("#search").value.trim().toLocaleLowerCase();
   const tracks=state.tracks;
   const preparing=track=>track.state==="preparing"||track.state==="uploaded";
-  const counts={all:tracks.length,ready:tracks.filter(t=>t.state==="ready").length,
+  const counts={all:tracks.length,ready:tracks.filter(t=>t.state==="ready"&&!t.hidden).length,hidden:tracks.filter(t=>t.hidden).length,
     preparing:tracks.filter(preparing).length,failed:tracks.filter(t=>t.state==="failed").length};
   Object.entries(counts).forEach(([key,value])=>{$(`#filter-${key}`).textContent=value;});
   $("#track-count").textContent=`${tracks.length} 首`;
-  const visible=tracks.filter(track=>(activeFilter==="all"||(activeFilter==="preparing"?preparing(track):track.state===activeFilter))&&
+  const visible=tracks.filter(track=>(activeFilter==="all"||(activeFilter==="hidden"?track.hidden:activeFilter==="preparing"?preparing(track):activeFilter==="ready"?track.state==="ready"&&!track.hidden:track.state===activeFilter))&&
     track.title.toLocaleLowerCase().includes(query));
   setText($("#results-count"),`顯示 ${visible.length} / ${tracks.length} 首${online?"":" · 上次同步資料"}`);
   $("#empty-state").hidden=visible.length>0;
@@ -487,7 +491,7 @@ function renderTracks(){
   const body=$("#tracks"),fragment=document.createDocumentFragment();
   for(const [index,track] of visible.entries()){
     const playing=playingId===track.id;
-    const row=document.createElement("div");row.className=`track-row${playing?" playing":""}`;row.setAttribute("role","listitem");
+    const row=document.createElement("div");row.className=`track-row${playing?" playing":""}${track.hidden?" hidden-track":""}`;row.setAttribute("role","listitem");
     const number=document.createElement("span");number.className="track-number";
     if(playing)number.append(icon("radio"));else number.textContent=String(index+1).padStart(2,"0");
     const art=document.createElement("button");art.type="button";art.className="track-art";art.append(icon("music"));
@@ -508,8 +512,8 @@ function renderTracks(){
       image.onerror=()=>{image.remove();detail.textContent=description?`${description} · 封面無法載入`:"封面無法載入";};art.append(image);
     }
     const status=document.createElement("span");status.className="badge";
-    badge(status,playing?"播放中":trackStates[track.state]||track.state,playing||track.state==="ready"?"good":track.state==="failed"?"bad":"warn");
-    status.hidden=track.state==="ready"&&!playing;
+    badge(status,playing?"播放中":track.hidden?"已隱藏":trackStates[track.state]||track.state,playing||(track.state==="ready"&&!track.hidden)?"good":track.state==="failed"?"bad":"warn");
+    status.hidden=track.state==="ready"&&!playing&&!track.hidden;
     const button=document.createElement("button");button.type="button";button.className="track-play";
     for(const [kind,target] of [["cover",art],["play",button]]){
       target.dataset.trackId=track.id;target.dataset.title=track.title;target.dataset.ready=String(track.state==="ready");
@@ -521,7 +525,11 @@ function renderTracks(){
     const remove=document.createElement("button");remove.type="button";remove.className="track-delete";
     remove.dataset.deleteId=track.id;remove.dataset.title=track.title;remove.dataset.focusKey=`${track.id}:delete`;
     remove.setAttribute("aria-label",`刪除：${track.title}`);remove.title="刪除曲目";remove.append(icon("trash"));
-    button.append(icon("play"));row.append(number,art,copy,status,button,remove);fragment.append(row);
+    const hide=document.createElement("button");hide.type="button";hide.className="track-hide";
+    hide.dataset.hideId=track.id;hide.dataset.hidden=String(!!track.hidden);hide.dataset.title=track.title;
+    hide.setAttribute("aria-label",`${track.hidden?"取消隱藏":"隱藏"}：${track.title}`);hide.title=track.hidden?"已隱藏，點擊恢復播放":"隱藏（不播放）";
+    hide.setAttribute("aria-pressed",String(!!track.hidden));hide.append(icon(track.hidden?"eye-off":"eye"));
+    button.append(icon("play"));row.append(number,art,copy,status,button,hide,remove);fragment.append(row);
   }
   body.replaceChildren(fragment);updateButtons();
   if(focused){
@@ -574,9 +582,21 @@ document.querySelectorAll("[data-action]").forEach(button=>{
   button.onclick=()=>control(button.dataset.action);
 });
 $("#tracks").onclick=async event=>{
+  const hide=event.target.closest("button[data-hide-id]");
+  if(hide){
+    if(hide.disabled)return;
+    const hidden=hide.dataset.hidden!=="true";
+    controlBusy=true;updateButtons();
+    try{
+      await call(`/api/tracks/${hide.dataset.hideId}/hidden`,{method:"PUT",headers:{"Content-Type":"application/json","X-Radio247-Action":"1"},body:JSON.stringify({hidden})});
+      notify(hidden?`已隱藏「${hide.dataset.title}」，將不會播放。`:`已取消隱藏「${hide.dataset.title}」。`);await refresh();
+    }catch(error){notify(errorText(error),true);}
+    finally{controlBusy=false;updateButtons();}
+    return;
+  }
   const remove=event.target.closest("button[data-delete-id]");
   if(remove){
-    if(remove.disabled||!confirm(`確定刪除「${remove.dataset.title}」？將一併刪除原始音檔與同名 PNG，無法復原。`))return;
+    if(remove.disabled||!confirm(`確定刪除「${remove.dataset.title}」？將一併刪除原始音檔與同名 PNG／MP4，無法復原。`))return;
     controlBusy=true;updateButtons();
     try{
       await call(`/api/tracks/${remove.dataset.deleteId}`,{method:"DELETE",headers:{"X-Radio247-Action":"1"}});
@@ -601,8 +621,8 @@ $("#clear-filters").onclick=()=>{
 function selectFile(file){
   if(uploadBusy)return;
   selectedFile=null;
-  if(file&&!/\.(mp3|mpa|m4a|wav|png|zip)$/i.test(file.name)){
-    $("#file").value="";$("#upload-status").textContent="不支援此格式，請選擇音訊、PNG 或 ZIP 檔案。";
+  if(file&&!/\.(mp3|mpa|m4a|wav|png|mp4|zip)$/i.test(file.name)){
+    $("#file").value="";$("#upload-status").textContent="不支援此格式，請選擇音訊、PNG、MP4 或 ZIP 檔案。";
     $("#upload-status").dataset.tone="bad";
   }else{
     selectedFile=file;$("#upload-status").textContent="";$("#upload-status").dataset.tone="neutral";

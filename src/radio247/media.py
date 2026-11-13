@@ -98,6 +98,32 @@ def probe(path: Path, settings: Settings) -> float:
     return duration
 
 
+def clip_frames(path: Path, spec: VideoSpec, settings: Settings) -> int:
+    """Frames to cache for an MP4 logo: its duration rounded to whole GOPs, within the limit."""
+    metadata = json.loads(
+        command(
+            [
+                settings.ffprobe,
+                "-v",
+                "error",
+                "-show_streams",
+                "-show_format",
+                "-of",
+                "json",
+                str(path),
+            ],
+            settings.probe_timeout,
+        )
+    )
+    if not any(stream["codec_type"] == "video" for stream in metadata["streams"]):
+        raise ValueError("No video stream")
+    duration = float(metadata["format"]["duration"])
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("Invalid duration")
+    longest = max(1, settings.logo_max_seconds * settings.fps // spec.gop)
+    return min(longest, max(1, int(duration * spec.fps / spec.gop + 0.5))) * spec.gop
+
+
 def analyze(path: Path, settings: Settings) -> str:
     target = f"I={settings.target_lufs}:TP={settings.target_peak}:LRA={settings.target_lra}"
     limiter = f"alimiter=limit={10 ** (settings.target_peak / 20)}:level=false:latency=true"
@@ -150,23 +176,39 @@ def prepare_image(source: Path | None, target: Path, settings: Settings) -> None
 
 
 def prepare_video(
-    image: Path, target: Path, spec: VideoSpec, settings: Settings | None = None
+    image: Path,
+    target: Path,
+    spec: VideoSpec,
+    settings: Settings | None = None,
+    *,
+    clip_frames: int | None = None,
 ) -> None:
+    """Encode a still image, or `clip_frames` frames of a looped video, as closed GOPs."""
     settings = settings or Settings()
+    if clip_frames:
+        source = ["-stream_loop", "-1", "-i", str(image)]
+        filters = [
+            "-vf",
+            f"fps={spec.fps},scale={settings.width}:{settings.height}"
+            ":force_original_aspect_ratio=increase,"
+            f"crop={settings.width}:{settings.height},setsar=1,"
+            # Round-trip through RGB so frame colour tags match the still-image path and the
+            # encoder emits the same SPS/PPS as PNG pictures (the radio requires identical ones).
+            "format=rgb24,format=yuv420p",
+        ]
+    else:
+        source = ["-loop", "1", "-framerate", str(spec.fps), "-i", str(image)]
+        filters = []
     command(
         [
             settings.ffmpeg,
             "-nostdin",
             "-v",
             "error",
-            "-loop",
-            "1",
-            "-framerate",
-            str(spec.fps),
-            "-i",
-            str(image),
+            *source,
+            *filters,
             "-frames:v",
-            str(spec.gop),
+            str(clip_frames or spec.gop),
             "-an",
             "-c:v",
             "libx264",
@@ -219,11 +261,18 @@ class CachedVideo:
                 for packet in container.demux(stream)
                 if packet.size
             ]
-        if not self.extra or len(self.packets) != self.spec.gop or not self.packets[0][1]:
+        count = len(self.packets)
+        if (
+            not self.extra
+            or count < self.spec.gop
+            or count % self.spec.gop
+            or not all(key for _, key in self.packets[:: self.spec.gop])
+        ):
             raise ValueError("Invalid closed GOP cache")
+        self.length = count
 
     def at(self, frame: int, *, start_frame: int = 0) -> WirePacket:
-        data, key = self.packets[(frame - start_frame) % self.spec.gop]
+        data, key = self.packets[(frame - start_frame) % self.length]
         return WirePacket("video", data, frame, frame, 1, Fraction(1, self.spec.fps), key)
 
 

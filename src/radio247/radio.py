@@ -76,6 +76,7 @@ def run(settings: Settings) -> None:
     last_report = 0.0
     skip: int | None = None
     underruns = 0
+    rejected: set[Path] = set()
     try:
         while not stopping.is_set():
             with control.lock:
@@ -134,13 +135,22 @@ def run(settings: Settings) -> None:
                     snapshot.image_seconds,
                     snapshot.image_interval,
                 )
+                if picture in rejected:
+                    picture = default.path
                 publisher.tick(video.path, audio.extra)
                 for packet in audio.encode(samples, pts):
                     while Fraction(video_frame, settings.fps) <= packet.timestamp:
                         if picture != video.path:
                             candidate = CachedVideo(picture, spec)
                             if candidate.extra != default.extra:
-                                raise ValueError("Picture codec configuration does not match")
+                                LOG.error(
+                                    "Picture codec configuration does not match; "
+                                    "using the default picture instead: %s",
+                                    picture,
+                                )
+                                rejected.add(picture)
+                                picture = default.path
+                                candidate = default
                             video = candidate
                             video_start_frame = video_frame
                         publisher.send(video.at(video_frame, start_frame=video_start_frame))

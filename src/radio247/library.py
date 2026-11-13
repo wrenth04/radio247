@@ -20,6 +20,7 @@ from radio247.media import (
     CachedVideo,
     VideoSpec,
     analyze,
+    clip_frames,
     command,
     prepare_image,
     prepare_video,
@@ -29,6 +30,7 @@ from radio247.settings import ImagePosition, Settings
 
 LOG = logging.getLogger(__name__)
 AUDIO_SUFFIXES = {".mp3", ".mpa", ".m4a", ".wav"}
+IMAGE_SUFFIXES = (".png", ".mp4")
 MEDIA_ERRORS = (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, av.FFmpegError)
 
 
@@ -76,6 +78,8 @@ class Store:
             columns = {row["name"] for row in db.execute("PRAGMA table_info(tracks)")}
             if "audio" not in columns:
                 db.execute("ALTER TABLE tracks ADD COLUMN audio TEXT")
+            if "hidden" not in columns:
+                db.execute("ALTER TABLE tracks ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
             controls = {row["name"] for row in db.execute("PRAGMA table_info(control)")}
             if "track_id" not in controls:
                 db.execute("ALTER TABLE control ADD COLUMN track_id TEXT")
@@ -98,7 +102,7 @@ class Store:
         with self.connect() as db:
             if action == "play":
                 track = db.execute(
-                    "SELECT audio,video FROM tracks WHERE id=? AND active=1 AND state='ready'",
+                    "SELECT audio,video FROM tracks WHERE id=? AND active=1 AND hidden=0 AND state='ready'",
                     (track_id,),
                 ).fetchone()
                 if not track or not all(
@@ -131,10 +135,19 @@ class Store:
             return [
                 dict(row)
                 for row in db.execute(
-                    "SELECT id,title,state,error,samples,video FROM tracks "
+                    "SELECT id,title,state,error,samples,video,hidden FROM tracks "
                     "WHERE active=1 ORDER BY title"
                 )
             ]
+
+    def set_hidden(self, track_id: str, hidden: bool) -> bool:
+        with self.connect() as db:
+            return (
+                db.execute(
+                    "UPDATE tracks SET hidden=? WHERE id=? AND active=1", (hidden, track_id)
+                ).rowcount
+                > 0
+            )
 
     def image(self) -> dict:
         with self.connect() as db:
@@ -169,7 +182,7 @@ class Store:
             control = db.execute("SELECT enabled,skip,track_id FROM control WHERE id=1").fetchone()
             rows = db.execute(
                 "SELECT id,title,audio,video,samples FROM tracks "
-                "WHERE state='ready' AND active=1 AND audio IS NOT NULL"
+                "WHERE state='ready' AND active=1 AND hidden=0 AND audio IS NOT NULL"
             ).fetchall()
         return Snapshot(
             enabled=bool(control["enabled"]),
@@ -221,7 +234,7 @@ class Library:
             + b":cache-v1"
         )
         self.picture_version = self.version + b":image-cover-v1"
-        version = hashlib.sha256(self.picture_version + b":streamed-audio-v1").hexdigest()
+        version = hashlib.sha256(self.picture_version + b":streamed-audio-v1:clip-v2").hexdigest()
         with store.connect() as db:
             previous = db.execute("SELECT value FROM metadata WHERE key='processing'").fetchone()
             if previous is None or previous["value"] != version:
@@ -271,21 +284,37 @@ class Library:
         if self.usage() + needed > self.settings.cache_max_bytes:
             raise ValueError("Cache quota exceeded; stop radio before removing unused cache files")
 
+    def picture_digest(self, image: Path | None) -> str:
+        if image is None:
+            return "black"
+        digest = self.digest(image)
+        if image.suffix.lower() == ".mp4":  # still-image cache keys stay unchanged
+            digest += f":clip-v2:{self.settings.logo_max_seconds}"
+        return digest
+
     def picture(self, image: Path | None) -> Path:
-        digest = self.digest(image) if image else "black"
+        digest = self.picture_digest(image)
+        is_clip = bool(image and image.suffix.lower() == ".mp4")
         key = hashlib.sha256(self.picture_version + digest.encode()).hexdigest()
         target = self.settings.cache_dir / f"{key}.mp4"
         if target.exists():
             CachedVideo(target, self.spec)
             return target
         self.require_space(
-            self.spec.buffer_size // 8 + self.spec.bitrate * self.settings.gop_seconds // 8
+            self.spec.buffer_size // 8
+            + self.spec.bitrate
+            * (self.settings.logo_max_seconds if is_clip else self.settings.gop_seconds)
+            // 8
         )
         png = target.with_suffix(".preparing.png")
         temporary = target.with_suffix(".preparing.mp4")
         try:
-            prepare_image(image, png, self.settings)
-            prepare_video(png, temporary, self.spec, self.settings)
+            if image and image.suffix.lower() == ".mp4":
+                frames = clip_frames(image, self.spec, self.settings)
+                prepare_video(image, temporary, self.spec, self.settings, clip_frames=frames)
+            else:
+                prepare_image(image, png, self.settings)
+                prepare_video(png, temporary, self.spec, self.settings)
             CachedVideo(temporary, self.spec)
             self.require_space(0)
             temporary.replace(target)
@@ -293,6 +322,15 @@ class Library:
             png.unlink(missing_ok=True)
             temporary.unlink(missing_ok=True)
         return target
+
+    def image_for(self, stem: str) -> Path | None:
+        for suffix in IMAGE_SUFFIXES:
+            image = self.settings.images_dir / f"{stem}{suffix}"
+            if image.is_symlink():
+                raise ValueError("Symlink images are not supported")
+            if image.is_file():
+                return image
+        return None
 
     def scan(self) -> None:
         self.scanning = True
@@ -317,10 +355,7 @@ class Library:
                     continue
                 if time.monotonic() - observation[1] < self.settings.file_stable_seconds:
                     continue
-                image = self.settings.images_dir / f"{source.stem}.png"
-                if image.is_symlink():
-                    raise ValueError("Symlink images are not supported")
-                self.prepare(track_id, source, image if image.is_file() else None)
+                self.prepare(track_id, source, self.image_for(source.stem))
             with self.store.connect() as db:
                 rows = db.execute("SELECT id FROM tracks").fetchall()
                 for row in rows:
@@ -332,7 +367,7 @@ class Library:
             self.scanning = False
 
     def delete(self, track_id: str) -> bool:
-        """Remove a track's source audio and paired PNG; cached derivatives stay for reuse."""
+        """Remove a track's source audio and paired PNG/MP4; cached derivatives stay for reuse."""
         for source in self.settings.media_dir.iterdir():
             if (
                 source.is_symlink()
@@ -341,10 +376,11 @@ class Library:
                 or hashlib.sha256(source.name.encode()).hexdigest()[:24] != track_id
             ):
                 continue
-            image = self.settings.images_dir / f"{source.stem}.png"
             source.unlink()
-            if image.is_file() and not image.is_symlink():
-                image.unlink()
+            for suffix in IMAGE_SUFFIXES:
+                image = self.settings.images_dir / f"{source.stem}{suffix}"
+                if image.is_file() and not image.is_symlink():
+                    image.unlink()
             self.observed.pop(source, None)
             self.digests.pop(source, None)
             with self.store.connect() as db:
@@ -365,7 +401,7 @@ class Library:
                 + b":analysis-v1"
             ).hexdigest()
             picture_version = (
-                self.digest(image)
+                self.picture_digest(image)
                 if image
                 else str(self.default_video.name if self.default_video else "pending")
             )
@@ -416,6 +452,10 @@ class Library:
             video = self.picture(image) if image else self.default_video
             if video is None:
                 raise ValueError("Default picture is not ready")
+            if self.default_video and Path(video) != self.default_video:
+                reference = CachedVideo(self.default_video, self.spec).extra
+                if CachedVideo(Path(video), self.spec).extra != reference:
+                    raise ValueError("Picture codec configuration does not match the default")
             with self.store.connect() as db:
                 db.execute(
                     "UPDATE tracks SET state='ready',audio=?,video=?,samples=?,error=NULL "

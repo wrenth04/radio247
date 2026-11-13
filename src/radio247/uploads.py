@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from fastapi import HTTPException
 
-from radio247.library import AUDIO_SUFFIXES
+from radio247.library import AUDIO_SUFFIXES, IMAGE_SUFFIXES
 from radio247.settings import Settings
 
 
@@ -48,7 +48,7 @@ def import_zip(path: Path, settings: Settings) -> dict[str, int]:
                 suffix = member.suffix.lower()
                 if any(
                     part.startswith(".") or part == "__MACOSX" for part in parts
-                ) or suffix not in AUDIO_SUFFIXES | {".png"}:
+                ) or suffix not in AUDIO_SUFFIXES | set(IMAGE_SUFFIXES):
                     skipped += 1
                     continue
                 if entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
@@ -57,7 +57,7 @@ def import_zip(path: Path, settings: Settings) -> dict[str, int]:
                     raise HTTPException(400, "ZIP contains an empty media file")
                 if entry.file_size > settings.upload_max_bytes:
                     raise HTTPException(413, "ZIP media file size limit exceeded")
-                directory = settings.images_dir if suffix == ".png" else settings.media_dir
+                directory = settings.images_dir if suffix in IMAGE_SUFFIXES else settings.media_dir
                 target = directory / (member.stem + suffix)
                 key = str(target).casefold()
                 if key in destinations:
@@ -67,7 +67,7 @@ def import_zip(path: Path, settings: Settings) -> dict[str, int]:
                 destinations.add(key)
                 selected.append((entry, target))
             if not selected:
-                raise HTTPException(400, "ZIP contains no supported audio or PNG files")
+                raise HTTPException(400, "ZIP contains no supported audio, PNG or MP4 files")
 
             total = 0
             for entry, target in selected:
@@ -85,7 +85,7 @@ def import_zip(path: Path, settings: Settings) -> dict[str, int]:
                     raise HTTPException(400, "ZIP media size does not match its metadata")
 
         # Validate every member before publication; pictures precede new audio files.
-        for temporary, target in sorted(staged, key=lambda item: item[1].suffix != ".png"):
+        for temporary, target in sorted(staged, key=lambda item: item[1].suffix not in IMAGE_SUFFIXES):
             temporary.replace(target)
         return {"imported": len(staged), "skipped": skipped}
     except (zipfile.BadZipFile, EOFError, zlib.error, NotImplementedError) as error:

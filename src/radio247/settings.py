@@ -41,6 +41,7 @@ class Settings(BaseModel):
     height: int = Field(default=1080, ge=90, le=2160)
     fps: Literal[1, 24, 25, 30, 50, 60] = 30
     gop_seconds: int = Field(default=2, ge=1, le=4)
+    logo_max_seconds: int = Field(default=30, ge=2, le=120)
     video_bitrate: int = Field(default=5000000, ge=100000, le=30000000)
     video_buffer_size: int = Field(default=10000000, ge=100000, le=60000000)
     video_preset: Literal["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"] = (

@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, model_validator
 
-from radio247.library import AUDIO_SUFFIXES, Library, Store, secret
+from radio247.library import AUDIO_SUFFIXES, IMAGE_SUFFIXES, Library, Store, secret
 from radio247.settings import ImagePosition, Settings
 from radio247.uploads import import_zip
 
@@ -34,6 +34,10 @@ class Action(BaseModel):
         if (self.action == "play") != (self.track_id is not None):
             raise ValueError("track_id is required only for the play action")
         return self
+
+
+class Visibility(BaseModel):
+    hidden: bool
 
 
 class ImageMode(BaseModel):
@@ -247,6 +251,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             store.control("skip")
         return {"status": "deleted"}
 
+    @app.put("/api/tracks/{track_id}/hidden", dependencies=[Depends(mutation)])
+    def hide_track(track_id: str, visibility: Visibility):
+        if not re.fullmatch(r"[0-9a-f]{24}", track_id) or not store.set_hidden(
+            track_id, visibility.hidden
+        ):
+            raise HTTPException(404, "Track not found")
+        if visibility.hidden and radio.get("track_id") == track_id and radio.get("playing"):
+            store.control("skip")
+        return {"status": "hidden" if visibility.hidden else "visible"}
+
     @app.get("/internal/snapshot", dependencies=[Depends(internal)])
     def snapshot():
         return store.snapshot(library.default_video)
@@ -266,9 +280,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not filename or Path(filename).name != filename or "\\" in filename:
             raise HTTPException(400, "A plain filename is required")
         suffix = Path(filename).suffix.lower()
-        if suffix not in AUDIO_SUFFIXES | {".png", ".zip"}:
-            raise HTTPException(400, "Supported files: MP3, MPA, M4A, WAV, PNG, ZIP")
-        directory = settings.images_dir if suffix == ".png" else settings.media_dir
+        if suffix not in AUDIO_SUFFIXES | {*IMAGE_SUFFIXES, ".zip"}:
+            raise HTTPException(400, "Supported files: MP3, MPA, M4A, WAV, PNG, MP4, ZIP")
+        directory = settings.images_dir if suffix in IMAGE_SUFFIXES else settings.media_dir
         if suffix == ".zip":
             directory = settings.data_dir / "uploads"
         temporary = directory / f".upload-{uuid.uuid4().hex}"
